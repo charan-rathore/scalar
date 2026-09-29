@@ -8,6 +8,24 @@ import {
 
 describe('api-reference-configuration', () => {
   it.each([
+    [undefined, 12],
+    [0, 0],
+    [1, 1],
+    [50, 50],
+    [-1, 12],
+    [1.5, 12],
+    [Number.POSITIVE_INFINITY, 12],
+    [Number.NaN, 12],
+    [Number.MAX_SAFE_INTEGER + 1, 12],
+    ['50', 12],
+    [null, 12],
+  ])('normalizes request body property limit %s to %s', (value, expected) => {
+    expect(
+      apiReferenceConfigurationSchema.parse({ maxVisibleRequestBodyProperties: value }).maxVisibleRequestBodyProperties,
+    ).toBe(expected)
+  })
+
+  it.each([
     [{}, true],
     [{ expandAllParameters: true }, true],
     [{ expandAllParameters: false }, false],

@@ -35,6 +35,7 @@ const { requestBody, options, document } = defineProps<{
     orderSchemaPropertiesBy: 'alpha' | 'preserve' | undefined
     hideModels: boolean | undefined
     expandAllSchemaProperties: boolean | undefined
+    maxVisibleRequestBodyProperties?: number
     schemaKeyboardNav: boolean | undefined
   }
 }>()
@@ -42,10 +43,9 @@ const { translate } = useLocalization()
 
 const { level: headingLevel } = useDocumentOutline('operationSection')
 
-/**
- * The maximum number of properties to show in the request body schema.
- */
-const MAX_VISIBLE_PROPERTIES = 12
+const maxVisibleProperties = computed(
+  (): number => options.maxVisibleRequestBodyProperties ?? 12,
+)
 
 const availableContentTypes = computed(() =>
   Object.keys(requestBody?.content ?? {}),
@@ -84,12 +84,16 @@ const modelLinkable = computed(() =>
 )
 
 /**
- * Splits schema properties into visible and collapsed sections when there are more than 12 properties.
+ * Splits wide request bodies without opening nested properties.
  * Returns null for schemas with fewer properties or non-object schemas.
  */
 const partitionedSchema = computed(() => {
   // Early return if not an object schema
-  if (!schema.value || !isTypeObject(schema.value)) {
+  if (
+    maxVisibleProperties.value === 0 ||
+    !schema.value ||
+    !isTypeObject(schema.value)
+  ) {
     return null
   }
 
@@ -112,7 +116,7 @@ const partitionedSchema = computed(() => {
     },
   )
 
-  if (sortedNames.length <= MAX_VISIBLE_PROPERTIES) {
+  if (sortedNames.length <= maxVisibleProperties.value) {
     return null
   }
 
@@ -123,17 +127,18 @@ const partitionedSchema = computed(() => {
   }
 
   return {
+    collapsedPropertyCount: sortedNames.length - maxVisibleProperties.value,
     visibleProperties: {
       ...schemaMetadata,
       properties: reduceNamesToObject(
-        sortedNames.slice(0, MAX_VISIBLE_PROPERTIES),
+        sortedNames.slice(0, maxVisibleProperties.value),
         properties,
       ),
     },
     collapsedProperties: {
       ...schemaMetadata,
       properties: reduceNamesToObject(
-        sortedNames.slice(MAX_VISIBLE_PROPERTIES),
+        sortedNames.slice(maxVisibleProperties.value),
         properties,
       ),
     },
@@ -230,7 +235,7 @@ const shouldRenderRequestBody = computed(
       "
       schemaContext="requestBody" />
 
-    <!-- For over 12 properties we want to show 12 and collapse the rest -->
+    <!-- Keep the remaining properties behind a single reveal control. -->
     <div
       v-if="partitionedSchema"
       class="request-body-schema">
@@ -254,6 +259,7 @@ const shouldRenderRequestBody = computed(
         schemaContext="requestBody" />
 
       <Schema
+        :additionalPropertyCount="partitionedSchema.collapsedPropertyCount"
         additionalProperties
         :breadcrumb
         compact
@@ -274,7 +280,7 @@ const shouldRenderRequestBody = computed(
         schemaContext="requestBody" />
     </div>
 
-    <!-- Show em all 12 and under -->
+    <!-- Bodies within the limit, or with no limit, render as one schema. -->
     <div
       v-else-if="schema"
       class="request-body-schema">

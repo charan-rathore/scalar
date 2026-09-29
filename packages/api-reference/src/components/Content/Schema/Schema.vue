@@ -46,6 +46,7 @@ const {
   hideHeading,
   hideDescription = false,
   additionalProperties,
+  additionalPropertyCount,
   discriminator,
   breadcrumb,
   hideModelNames = false,
@@ -74,6 +75,8 @@ const {
   hideDescription?: boolean
   /** Show a special one way toggle for additional properties, also has a top border when open */
   additionalProperties?: boolean
+  /** Number of request body properties hidden behind the overflow control. */
+  additionalPropertyCount?: number
   /** Hide model names in type display */
   hideModelNames?: boolean
   /** Discriminator object */
@@ -96,6 +99,18 @@ const {
   cycleKey?: unknown
 }>()
 const { translate } = useLocalization()
+
+const additionalPropertiesLabel = computed((): string => {
+  if (additionalPropertyCount === undefined) {
+    return translate('schema.showAdditionalProperties')
+  }
+  return translate(
+    additionalPropertyCount === 1
+      ? 'schema.showOneMoreProperty'
+      : 'schema.showMoreProperties',
+    { count: additionalPropertyCount },
+  )
+})
 
 /**
  * The dynamic scope inherited from ancestor schema resources.
@@ -428,7 +443,7 @@ const toggle = (): void => {
                puck the row toggles draw, on the same gutter line -->
           <SchemaGlyphPuck class="additional-toggle-glyph" />
           <span class="additional-toggle-label">
-            {{ translate('schema.showAdditionalProperties') }}
+            {{ additionalPropertiesLabel }}
             <ScreenReader v-if="name">
               {{ translate('schema.forName', { name }) }}
             </ScreenReader>
@@ -452,10 +467,10 @@ const toggle = (): void => {
           :compact
           composition="oneOf"
           :compositionPath="compositionPath"
+          :depth="depth"
           :discriminator="schema?.discriminator"
           :eventBus="eventBus"
           :hideHeading
-          :depth="depth"
           :hideModelNames
           :level="level"
           :name="name"
@@ -468,10 +483,10 @@ const toggle = (): void => {
           :breadcrumb
           :compact
           :compositionPath="compositionPath"
+          :depth="depth"
           :discriminator
           :eventBus="eventBus"
           :hideHeading
-          :depth="depth"
           :hideModelNames
           :level="level + 1"
           :options
@@ -484,10 +499,10 @@ const toggle = (): void => {
             :breadcrumb
             :compact
             :compositionPath="compositionPath"
+            :depth="depth"
             :discriminator
             :eventBus="eventBus"
             :hideHeading
-            :depth="depth"
             :hideModelNames
             :level
             :options
