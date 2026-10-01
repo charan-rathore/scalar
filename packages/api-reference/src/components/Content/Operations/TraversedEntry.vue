@@ -68,6 +68,7 @@ const {
     | 'schemaKeyboardNav'
     | 'showOperationId'
     | 'hideModels'
+    | 'hideModelNames'
     | 'modelsSectionLabel'
   >
   /** Currently selected server for the document */

@@ -48,7 +48,7 @@ const {
   additionalProperties,
   discriminator,
   breadcrumb,
-  hideModelNames = false,
+  hideModelNames: hideModelNamesProp = false,
   options,
   schemaContext,
   compositionPath,
@@ -96,6 +96,10 @@ const {
   cycleKey?: unknown
 }>()
 const { translate } = useLocalization()
+
+const hideModelNames = computed(
+  (): boolean => hideModelNamesProp || !!options.hideModelNames,
+)
 
 /**
  * The dynamic scope inherited from ancestor schema resources.

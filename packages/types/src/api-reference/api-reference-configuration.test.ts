@@ -8,6 +8,15 @@ import {
 
 describe('api-reference-configuration', () => {
   it.each([
+    [{}, false],
+    [{ hideModelNames: true }, true],
+    [{ hideModelNames: false }, false],
+    [{ hideModelNames: 'true' }, false],
+  ])('parses model name visibility for %j', (config, expected) => {
+    expect(apiReferenceConfigurationSchema.parse(config).hideModelNames).toBe(expected)
+  })
+
+  it.each([
     [{}, true],
     [{ expandAllParameters: true }, true],
     [{ expandAllParameters: false }, false],

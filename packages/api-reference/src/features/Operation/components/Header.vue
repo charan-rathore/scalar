@@ -18,6 +18,7 @@ const {
   expandAllSchemaProperties,
   schemaKeyboardNav,
   hideModels,
+  hideModelNames,
 } = defineProps<{
   header: HeaderObject
   name: string
@@ -33,6 +34,8 @@ const {
   schemaKeyboardNav: boolean | undefined
   /** Whether the models section is hidden, so model names render as plain text instead of links */
   hideModels: boolean | undefined
+  /** Show structural types in schema labels */
+  hideModelNames?: boolean
 }>()
 </script>
 <template>
@@ -48,6 +51,7 @@ const {
       expandAllSchemaProperties: expandAllSchemaProperties,
       schemaKeyboardNav: schemaKeyboardNav,
       hideModels: hideModels,
+      hideModelNames,
       document,
     }"
     :schema="getResolvedRef(header.schema)" />

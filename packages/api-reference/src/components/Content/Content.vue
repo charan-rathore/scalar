@@ -95,6 +95,7 @@ const {
     | 'servers'
     | 'showOperationId'
     | 'hideModels'
+    | 'hideModelNames'
     | 'modelsSectionLabel'
   >
   document: WorkspaceDocument | undefined

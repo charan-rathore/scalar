@@ -32,6 +32,8 @@ const { headers, breadcrumb, schemaKeyboardNav, expandAllSchemaProperties } =
     schemaKeyboardNav?: boolean | undefined
     /** Whether the models section is hidden, so model names render as plain text instead of links */
     hideModels: boolean | undefined
+    /** Show structural types in schema labels */
+    hideModelNames?: boolean
   }>()
 const { translate } = useLocalization()
 
@@ -150,6 +152,7 @@ const countLabel = computed(() =>
             :eventBus="eventBus"
             :expandAllSchemaProperties="expandAllSchemaProperties"
             :header="header"
+            :hideModelNames="hideModelNames"
             :hideModels="hideModels"
             :name="key"
             :orderRequiredPropertiesFirst="orderRequiredPropertiesFirst"

@@ -10,6 +10,7 @@ import { computed } from 'vue'
 
 import { Schema } from '@/components/Content/Schema'
 import { inferDiscriminatorMappingComposition } from '@/components/Content/Schema/helpers/get-compositions-to-render'
+import { getTypeSignatureTokens } from '@/components/Content/Schema/helpers/get-type-signature-tokens'
 import { isModelLinkable } from '@/components/Content/Schema/helpers/is-model-linkable'
 import { isTypeObject } from '@/components/Content/Schema/helpers/is-type-object'
 import { getModelNameFromSchema } from '@/components/Content/Schema/helpers/schema-name'
@@ -34,6 +35,7 @@ const { requestBody, options, document } = defineProps<{
     orderRequiredPropertiesFirst: boolean | undefined
     orderSchemaPropertiesBy: 'alpha' | 'preserve' | undefined
     hideModels: boolean | undefined
+    hideModelNames?: boolean
     expandAllSchemaProperties: boolean | undefined
     schemaKeyboardNav: boolean | undefined
   }
@@ -72,7 +74,19 @@ const schema = computed(() => getResolvedRef(rawSchema.value))
 
 /** When the schema is a $ref, preserve its name so the UI can show the ref name instead of just the type. */
 const modelLink = computed(
-  () => (rawSchema.value && getModelNameFromSchema(rawSchema.value)) ?? null,
+  () =>
+    (!options.hideModelNames &&
+      rawSchema.value &&
+      getModelNameFromSchema(rawSchema.value)) ||
+    null,
+)
+
+const schemaLabel = computed((): string | undefined =>
+  options.hideModelNames && rawSchema.value
+    ? getTypeSignatureTokens(rawSchema.value, { hideModelNames: true })
+        .map((token) => token.text)
+        .join(' ')
+    : modelLink.value?.label,
 )
 
 /** Whether the model name links to the models section, or renders as plain text. */
@@ -173,20 +187,20 @@ const shouldRenderRequestBody = computed(
         :level="headingLevel">
         <slot name="title" />
         <span
-          v-if="modelLink"
+          v-if="schemaLabel"
           class="text-c-2 text-xs leading-none font-normal"
           data-testid="request-body-schema-name">
           <span class="text-c-3 mx-1.5">·</span>
           <LinkButton
-            v-if="eventBus && modelLink.schemaKey && modelLinkable"
+            v-if="eventBus && modelLink?.schemaKey && modelLinkable"
             @click="
               eventBus.emit('scroll-to:model-by-name', {
                 name: modelLink.schemaKey,
               })
             ">
-            {{ modelLink.label }}
+            {{ schemaLabel }}
           </LinkButton>
-          <template v-else>{{ modelLink.label }}</template>
+          <template v-else>{{ schemaLabel }}</template>
         </span>
       </SectionHeaderTag>
       <div class="flex items-center gap-2">
@@ -248,6 +262,7 @@ const shouldRenderRequestBody = computed(
           expandAllSchemaProperties: options.expandAllSchemaProperties,
           schemaKeyboardNav: options.schemaKeyboardNav,
           hideModels: options.hideModels,
+          hideModelNames: options.hideModelNames,
           document,
         }"
         :schema="partitionedSchema.visibleProperties"
@@ -268,6 +283,7 @@ const shouldRenderRequestBody = computed(
           expandAllSchemaProperties: options.expandAllSchemaProperties,
           schemaKeyboardNav: options.schemaKeyboardNav,
           hideModels: options.hideModels,
+          hideModelNames: options.hideModelNames,
           document,
         }"
         :schema="partitionedSchema.collapsedProperties"
@@ -293,6 +309,7 @@ const shouldRenderRequestBody = computed(
           expandAllSchemaProperties: options.expandAllSchemaProperties,
           schemaKeyboardNav: options.schemaKeyboardNav,
           hideModels: options.hideModels,
+          hideModelNames: options.hideModelNames,
           document,
         }"
         :schema="schema"

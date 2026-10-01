@@ -449,7 +449,7 @@ const arrayItemsCycleKey = computed(() => {
 const sharedChildProps = computed(() => ({
   compact: props.compact,
   eventBus: props.eventBus,
-  hideModelNames: props.hideModelNames,
+  hideModelNames: hideModelNames.value,
   level: props.level + 1,
   name: props.name,
   options: props.options,
@@ -534,6 +534,10 @@ const isDiscriminatorProperty = computed(() =>
  */
 
 const { translate } = useLocalization()
+
+const hideModelNames = computed(
+  (): boolean => props.hideModelNames || !!props.options.hideModelNames,
+)
 
 /** Whether this property has children to put behind a toggle. */
 const isExpandable = computed(
@@ -834,7 +838,7 @@ const treeChildCountLabel = computed((): string | null => {
  */
 const signatureInlinesEnum = computed((): boolean =>
   typeSignatureInlinesEnum(optimizedValue.value, {
-    hideModelNames: props.hideModelNames,
+    hideModelNames: hideModelNames.value,
   }),
 )
 
