@@ -1,9 +1,104 @@
-import type { ExampleObject, SchemaObject } from '@scalar/workspace-store/schemas/v3.2/strict/openapi-document'
+import { createWorkspaceStore } from '@scalar/workspace-store/client'
+import { getSchemaExampleFromBody } from '@scalar/workspace-store/request-example'
+import type {
+  ExampleObject,
+  OpenApiDocument,
+  OperationObject,
+  PathItemObject,
+  SchemaObject,
+} from '@scalar/workspace-store/schemas/v3.2/strict/openapi-document'
 import { assert, describe, expect, it } from 'vitest'
 
 import { getFormBodyRows, getFormBodyValue } from './get-form-body-rows'
 
+const formFieldSummary = (rows: ReturnType<typeof getFormBodyRows>) =>
+  rows.map((row) => ({
+    name: row.name,
+    value: row.value,
+    description: row.description,
+    type: row.schema && 'type' in row.schema ? row.schema.type : undefined,
+    isRequired: row.isRequired,
+    isDisabled: row.isDisabled,
+  }))
+
 describe('getFormBodyRows', () => {
+  it('expands a multipart allOf $ref plus description into the referenced fields', async () => {
+    // OpenAPI 3.1 forbids keywords next to $ref, so generators wrap the reference and the
+    // description in allOf. The form has to follow that reference instead of rendering one null field.
+    const store = createWorkspaceStore()
+    await store.addDocument({
+      name: 'default',
+      document: {
+        openapi: '3.1.0',
+        info: { title: 'Test', version: '1.0.0' },
+        paths: {
+          '/upload': {
+            post: {
+              requestBody: {
+                required: true,
+                content: {
+                  'multipart/form-data': {
+                    schema: {
+                      type: 'object',
+                      properties: {
+                        file: {
+                          allOf: [
+                            { $ref: '#/components/schemas/MyData' },
+                            { description: 'JSON file containing the data.' },
+                          ],
+                        },
+                      },
+                      required: ['file'],
+                    },
+                  },
+                },
+              },
+              responses: { '200': { description: 'OK' } },
+            },
+          },
+        },
+        components: {
+          schemas: {
+            MyData: {
+              type: 'object',
+              properties: {
+                name: { type: 'string' },
+                value: { type: 'integer' },
+              },
+              required: ['name'],
+            },
+          },
+        },
+      },
+    })
+    const document = store.workspace.documents['default'] as OpenApiDocument | undefined
+    const upload = document?.paths?.['/upload'] as PathItemObject | undefined
+    const post = upload?.post as OperationObject | undefined
+    const requestBody = post?.requestBody
+    assert(requestBody && 'content' in requestBody)
+    const example = getSchemaExampleFromBody(requestBody, 'multipart/form-data')
+    const schema = requestBody.content?.['multipart/form-data']?.schema as SchemaObject | undefined
+
+    expect(formFieldSummary(getFormBodyRows({ value: example }, 'multipart/form-data', schema))).toStrictEqual([
+      {
+        name: 'file.name',
+        value: '',
+        description: 'JSON file containing the data.',
+        type: 'string',
+        isRequired: true,
+        isDisabled: false,
+      },
+      {
+        name: 'file.value',
+        value: '1',
+        description: 'JSON file containing the data.',
+        type: 'integer',
+        isRequired: false,
+        isDisabled: false,
+      },
+    ])
+  })
+
   it.each(['multipart/form-data', 'application/x-www-form-urlencoded'])(
     'uses structured data for %s rows when wire text exists',
     (contentType) => {
@@ -470,6 +565,99 @@ describe('getFormBodyRows', () => {
       const extra = result.find((row) => row.name === 'toString')
       // Undeclared, so it is not auto-disabled by the schema default.
       expect(extra?.isDisabled).toBe(false)
+    })
+
+    it('expands an allOf object field and keeps a property description ahead of the wrapper description', () => {
+      const example: ExampleObject = {
+        value: { file: { name: '', value: 1 } },
+      }
+      const formBodySchema = {
+        type: 'object',
+        required: ['file'],
+        properties: {
+          file: {
+            allOf: [
+              {
+                type: 'object',
+                required: ['name'],
+                properties: {
+                  name: { type: 'string', description: 'Given name' },
+                  value: { type: 'integer' },
+                },
+              },
+              { description: 'JSON file containing the data.' },
+            ],
+          },
+        },
+      } as unknown as SchemaObject
+
+      expect(formFieldSummary(getFormBodyRows(example, 'multipart/form-data', formBodySchema))).toStrictEqual([
+        {
+          name: 'file.name',
+          value: '',
+          description: 'Given name',
+          type: 'string',
+          isRequired: true,
+          isDisabled: false,
+        },
+        {
+          name: 'file.value',
+          value: '1',
+          description: 'JSON file containing the data.',
+          type: 'integer',
+          isRequired: false,
+          isDisabled: false,
+        },
+      ])
+    })
+
+    it('keeps a primitive allOf field as one row with the wrapper description', () => {
+      const example: ExampleObject = { value: { title: 'Hello' } }
+      const formBodySchema = {
+        type: 'object',
+        required: ['title'],
+        properties: {
+          title: {
+            allOf: [{ type: 'string' }, { description: 'Display title' }],
+          },
+        },
+      } as unknown as SchemaObject
+
+      expect(formFieldSummary(getFormBodyRows(example, 'multipart/form-data', formBodySchema))).toStrictEqual([
+        {
+          name: 'title',
+          value: 'Hello',
+          description: 'Display title',
+          type: 'string',
+          isRequired: true,
+          isDisabled: false,
+        },
+      ])
+    })
+
+    it('does not copy a plain object description onto nested fields', () => {
+      const example: ExampleObject = { value: { props: { name: 'Widget' } } }
+      const formBodySchema: SchemaObject = {
+        type: 'object',
+        properties: {
+          props: {
+            type: 'object',
+            description: 'Widget metadata',
+            properties: { name: { type: 'string' } },
+          },
+        },
+      }
+
+      expect(formFieldSummary(getFormBodyRows(example, 'multipart/form-data', formBodySchema))).toStrictEqual([
+        {
+          name: 'props.name',
+          value: 'Widget',
+          description: undefined,
+          type: 'string',
+          isRequired: false,
+          isDisabled: false,
+        },
+      ])
     })
 
     it('expands nested object properties into dotted rows (widget #4834 example)', () => {

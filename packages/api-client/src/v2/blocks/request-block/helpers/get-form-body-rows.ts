@@ -1,6 +1,10 @@
 import { isObject } from '@scalar/helpers/object/is-object'
 import { objectEntries } from '@scalar/helpers/object/object-entries'
-import { coerceLeafValueToSchemaType } from '@scalar/workspace-store/request-example'
+import {
+  allOfDescription,
+  coerceLeafValueToSchemaType,
+  schemaForNestedWalk,
+} from '@scalar/workspace-store/request-example'
 import { resolve } from '@scalar/workspace-store/resolve'
 import type { ExampleObject, SchemaObject } from '@scalar/workspace-store/schemas/v3.2/strict/openapi-document'
 import { isObjectSchema } from '@scalar/workspace-store/schemas/v3.2/strict/type-guards'
@@ -31,22 +35,54 @@ export type LeafRow = {
  * placeholders all stop the recursion. Object properties recurse, so the widget example
  * (`file` + `props.{name,description,created_at}`) yields four leaves.
  */
+/** Copy an allOf wrapper description onto direct leaves that do not already have one. */
+const withAllOfDescription = (
+  schema: SchemaObject | undefined,
+  description: string | undefined,
+): SchemaObject | undefined => {
+  if (!schema || !description || schema.description) {
+    return schema
+  }
+  return { ...schema, description }
+}
+
+const stampAllOfDescription = (
+  leaves: LeafRow[],
+  parentPathLength: number,
+  description: string | undefined,
+): LeafRow[] => {
+  if (!description) {
+    return leaves
+  }
+  return leaves.map((leaf) => {
+    // Only the wrapper's own fields. Deeper objects keep their own descriptions.
+    if (leaf.path.length !== parentPathLength + 1) {
+      return leaf
+    }
+    const schema = withAllOfDescription(leaf.schema, description)
+    return schema === leaf.schema ? leaf : { ...leaf, schema }
+  })
+}
+
 export const collectLeafProperties = (
   schema: SchemaObject,
   parentPath: string[] = [],
   parentRequired = true,
 ): LeafRow[] => {
-  // Nothing to walk if this is not an object schema or has no declared properties.
-  if (!isObjectSchema(schema) || !schema.properties) {
+  // allOf wrappers collapse to the referenced object. Object schemas that already
+  // declare properties stay as written so a sibling allOf does not rewrite `required`.
+  const walkSchema = schemaForNestedWalk(schema)
+  if (!walkSchema || !isObjectSchema(walkSchema) || !walkSchema.properties) {
     return []
   }
 
   // `required` is a list of property names on *this* schema, so build it once per level.
-  const requiredSet = new Set(schema.required ?? [])
+  const requiredSet = new Set(walkSchema.required ?? [])
   const leaves: LeafRow[] = []
 
-  for (const [key, rawChildSchema] of objectEntries(schema.properties)) {
-    const childSchema = resolve.schema(rawChildSchema)
+  for (const [key, rawChildSchema] of objectEntries(walkSchema.properties)) {
+    const description = allOfDescription(rawChildSchema)
+    const childSchema = schemaForNestedWalk(rawChildSchema)
     const path = [...parentPath, String(key)]
 
     // A leaf is only required when *every* ancestor was also required — a non-required
@@ -57,9 +93,11 @@ export const collectLeafProperties = (
     // everything else (primitives, arrays, files, additionalProperties placeholders)
     // is treated as a leaf and stops the descent.
     if (childSchema && isObjectSchema(childSchema) && childSchema.properties) {
-      leaves.push(...collectLeafProperties(childSchema, path, isRequired))
+      leaves.push(
+        ...stampAllOfDescription(collectLeafProperties(childSchema, path, isRequired), path.length, description),
+      )
     } else {
-      leaves.push({ path, schema: childSchema, isRequired })
+      leaves.push({ path, schema: withAllOfDescription(childSchema, description), isRequired })
     }
   }
 
@@ -84,7 +122,8 @@ export const collectExampleRows = (
   const exampleEntries = isObject(example) ? objectEntries(example) : []
   const exampleByKey = new Map<string, unknown>(exampleEntries.map(([key, value]) => [String(key), value]))
   const declaredKeys = new Set<string>()
-  const schemaProperties = schema && isObjectSchema(schema) ? (schema.properties ?? {}) : {}
+  const walkSchema = schemaForNestedWalk(schema)
+  const schemaProperties = walkSchema && isObjectSchema(walkSchema) ? (walkSchema.properties ?? {}) : {}
 
   // Schema-declared properties first, in schema order. Nested object schemas recurse so
   // each leaf gets its own row; otherwise the schema-declared key is a leaf and uses the
@@ -92,7 +131,7 @@ export const collectExampleRows = (
   for (const [key, rawChildSchema] of objectEntries(schemaProperties)) {
     const keyStr = String(key)
     declaredKeys.add(keyStr)
-    const childSchema = resolve.schema(rawChildSchema)
+    const childSchema = schemaForNestedWalk(rawChildSchema)
     const path = [...parentPath, keyStr]
     const exampleSubvalue = exampleByKey.get(keyStr)
 

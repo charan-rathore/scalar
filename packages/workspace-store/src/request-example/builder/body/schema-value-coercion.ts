@@ -1,6 +1,26 @@
-import { getResolvedRef, mergeSiblingReferences } from '@scalar/workspace-store/helpers/get-resolved-ref'
-import type { SchemaObject } from '@scalar/workspace-store/schemas/v3.2/strict/openapi-document'
+import type { SchemaObject, SchemaReferenceType } from '@scalar/workspace-store/schemas/v3.2/strict/openapi-document'
 import { isObjectSchema } from '@scalar/workspace-store/schemas/v3.2/strict/type-guards'
+
+import { flattenAllOfSchema } from '@/request-example/builder/helpers/flatten-all-of-schema'
+
+/**
+ * Schema to walk when deciding whether a node has nested properties.
+ *
+ * `allOf` wrappers (the OpenAPI 3.1 `$ref` plus description pattern) collapse to the
+ * referenced object. A schema that already declares `type: object` and `properties`
+ * stays as written so a sibling `allOf` does not rewrite `required`.
+ */
+export const schemaForNestedWalk = (
+  schema: SchemaReferenceType<SchemaObject> | undefined,
+): SchemaObject | undefined => {
+  if (!schema || typeof schema !== 'object') {
+    return undefined
+  }
+  if (isObjectSchema(schema as SchemaObject) && 'properties' in schema && schema.properties) {
+    return schema as SchemaObject
+  }
+  return flattenAllOfSchema(schema)
+}
 
 /** Normalize a schema's `type` (string | string[] | absent) into a plain string array. */
 const normalizeSchemaTypes = (schema: SchemaObject): string[] => {
@@ -12,15 +32,19 @@ const normalizeSchemaTypes = (schema: SchemaObject): string[] => {
  * Walk an object schema along a dotted-row path and return the resolved leaf schema,
  * or undefined when any segment is not a declared object property.
  */
-export const resolveLeafSchema = (schema: SchemaObject | undefined, segments: string[]): SchemaObject | undefined => {
-  let current = schema
+export const resolveLeafSchema = (
+  schema: SchemaReferenceType<SchemaObject> | undefined,
+  segments: string[],
+): SchemaObject | undefined => {
+  let current: SchemaReferenceType<SchemaObject> | undefined = schema
   for (const segment of segments) {
-    if (!current || !isObjectSchema(current) || !current.properties) {
+    const walk = schemaForNestedWalk(current)
+    if (!walk || !isObjectSchema(walk) || !walk.properties) {
       return undefined
     }
-    current = getResolvedRef(current.properties[segment], mergeSiblingReferences) as SchemaObject | undefined
+    current = walk.properties[segment]
   }
-  return current
+  return schemaForNestedWalk(current)
 }
 
 /** True when a JSON-parsed value's runtime type is allowed by the schema's declared types. */
@@ -102,15 +126,13 @@ export const coerceUntypedValue = (value: unknown): unknown => {
  * back into nested objects.
  */
 export const buildDottedNestedRowPredicate = (schema: unknown) => {
-  const resolved = schema ? (getResolvedRef(schema, mergeSiblingReferences) as SchemaObject | undefined) : undefined
+  const resolved = schemaForNestedWalk(schema as SchemaObject | undefined)
   if (!resolved || !isObjectSchema(resolved) || !resolved.properties) {
     return (_name: string, _value: unknown) => false
   }
   const nestedTopKeys = new Set<string>()
   for (const [key, child] of Object.entries(resolved.properties)) {
-    const childResolved = child
-      ? (getResolvedRef(child, mergeSiblingReferences) as SchemaObject | undefined)
-      : undefined
+    const childResolved = schemaForNestedWalk(child)
     if (childResolved && isObjectSchema(childResolved) && childResolved.properties) {
       nestedTopKeys.add(key)
     }
