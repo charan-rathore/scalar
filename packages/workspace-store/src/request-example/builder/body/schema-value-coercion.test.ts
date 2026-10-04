@@ -77,6 +77,31 @@ describe('resolveLeafSchema', () => {
     expect(resolveLeafSchema(schema, ['missing'])).toBeUndefined()
     expect(resolveLeafSchema(undefined, ['user'])).toBeUndefined()
   })
+
+  it('resolves leaves through an allOf $ref and description', () => {
+    const referenced: SchemaObject = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        value: { type: 'integer' },
+      },
+      required: ['name'],
+    }
+    const composed = {
+      type: 'object',
+      properties: {
+        file: {
+          allOf: [
+            { $ref: '#/components/schemas/MyData', '$ref-value': referenced },
+            { description: 'JSON file containing the data.' },
+          ],
+        },
+      },
+    } as unknown as SchemaObject
+
+    expect(resolveLeafSchema(composed, ['file', 'name'])).toStrictEqual({ type: 'string' })
+    expect(resolveLeafSchema(composed, ['file', 'value'])).toStrictEqual({ type: 'integer' })
+  })
 })
 
 describe('buildDottedNestedRowPredicate', () => {
@@ -102,5 +127,31 @@ describe('buildDottedNestedRowPredicate', () => {
   it('never matches without a schema', () => {
     const predicate = buildDottedNestedRowPredicate(undefined)
     expect(predicate('props.name', 'x')).toBe(false)
+  })
+
+  it('matches dotted names when the nested object is an allOf $ref plus description', () => {
+    const referenced: SchemaObject = {
+      type: 'object',
+      properties: {
+        name: { type: 'string' },
+        value: { type: 'integer' },
+      },
+    }
+    const composed = {
+      type: 'object',
+      properties: {
+        file: {
+          allOf: [
+            { $ref: '#/components/schemas/MyData', '$ref-value': referenced },
+            { description: 'JSON file containing the data.' },
+          ],
+        },
+      },
+    } as unknown as SchemaObject
+
+    const predicate = buildDottedNestedRowPredicate(composed)
+    expect(predicate('file.name', '')).toBe(true)
+    expect(predicate('file.value', '1')).toBe(true)
+    expect(predicate('file', '{"name":""}')).toBe(false)
   })
 })

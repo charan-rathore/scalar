@@ -5,6 +5,7 @@ export {
   coerceLeafValueToSchemaType,
   coerceUntypedValue,
   resolveLeafSchema,
+  schemaForNestedWalk,
 } from './body/schema-value-coercion'
 export { type SerializedFormProperty, serializeFormPropertyWithEncoding } from './body/serialize-form-property'
 export { serializeMultipartArray } from './body/serialize-multipart-array'
@@ -30,6 +31,7 @@ export {
   serializeSimpleStyle,
   serializeSpaceDelimitedStyle,
 } from './header/serialize-parameter'
+export { allOfDescription } from './helpers/flatten-all-of-schema'
 export { getEnvironmentVariables } from './helpers/get-environment-variables'
 export { getExample } from './helpers/get-example'
 export { getExampleFromSchema } from './helpers/get-example-from-schema'

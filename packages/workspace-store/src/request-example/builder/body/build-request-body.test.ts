@@ -911,6 +911,47 @@ describe('buildRequestBody', () => {
     expect(typeof result?.value).toBe('string')
   })
 
+  it('regroups an allOf $ref multipart field back into one JSON part', () => {
+    const requestBody = coerceValue(RequestBodyObjectSchema, {
+      content: {
+        'multipart/form-data': {
+          schema: {
+            type: 'object',
+            required: ['file'],
+            properties: {
+              file: {
+                allOf: [
+                  {
+                    type: 'object',
+                    required: ['name'],
+                    properties: {
+                      name: { type: 'string' },
+                      value: { type: 'integer' },
+                    },
+                  },
+                  { description: 'JSON file containing the data.' },
+                ],
+              },
+            },
+          },
+          examples: {
+            default: {
+              value: [
+                { name: 'file.name', value: '' },
+                { name: 'file.value', value: '1' },
+              ],
+            },
+          },
+        },
+      },
+    })
+
+    const result = buildRequestBody(requestBody, 'default')
+    expect(result?.mode).toBe('formdata')
+    assert(result?.mode === 'formdata')
+    expect(result.value).toEqual([{ type: 'text', key: 'file', value: JSON.stringify({ name: '', value: 1 }) }])
+  })
+
   it('regroups dotted multipart rows back into a single JSON-stringified text part', () => {
     const requestBody = coerceValue(RequestBodyObjectSchema, {
       content: {
